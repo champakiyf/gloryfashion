@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>দোকানের হিসাব</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+#rp .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+#rp .row>*{flex:1 1 170px}
+:root{--ink:#1d2540;--indigo:#26346b;--paper:#f2f4f8;--card:#fff;--line:#d9deea;--sale:#1f7a4d;--buy:#b4541a;--due:#b3261e;--gold:#d99a1e;--muted:#5d6784}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Noto Sans Bengali",system-ui,sans-serif;background:var(--paper);color:var(--ink);line-height:1.55}
+header{background:var(--indigo);color:#fff;padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-bottom:4px solid var(--gold)}
+header input{background:transparent;border:0;border-bottom:1px dashed #ffffff88;color:#fff;font:700 20px inherit;font-family:inherit;width:min(300px,70vw)}
+header .tools button{background:#ffffff1f;color:#fff;border:1px solid #ffffff44;margin-left:6px}
+main{max-width:1000px;margin:0 auto;padding:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--indigo);padding:10px 12px;border-radius:4px}
+.stat small{color:var(--muted);display:block}
+.stat b{font-size:20px}
+.stat.g{border-left-color:var(--sale)}.stat.r{border-left-color:var(--due)}.stat.y{border-left-color:var(--gold)}
+h2{font-size:17px;margin:0 0 10px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:16px}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
+label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+input,select,button{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink)}
+button{cursor:pointer}
+button.primary{background:var(--indigo);color:#fff;border-color:var(--indigo);font-weight:600}
+button.sm{padding:3px 8px;font-size:13px}
+:focus-visible{outline:3px solid var(--gold);outline-offset:1px}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.tabs button.on{background:var(--ink);color:#fff}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:640px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:#eaedf5;font-weight:600}
+td.n,th.n{text-align:right;white-space:nowrap}
+.t-বিক্রয়{color:var(--sale);font-weight:600}.t-ক্রয়{color:var(--buy);font-weight:600}.t-খরচ{color:var(--muted);font-weight:600}
+.due{color:var(--due);font-weight:700}
+.empty{color:var(--muted);padding:18px;text-align:center}
+@media print{#rp,header .tools,form,.tabs,.filters,button{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<header>
+  <input id="shop" aria-label="দোকানের নাম" value="আমার কাপড়ের দোকান">
+  <div class="tools">
+    <button onclick="exportCSV()">CSV</button>
+    <button onclick="backup()">ব্যাকআপ</button>
+    <button onclick="document.getElementById('rf').click()">রিস্টোর</button>
+    <button onclick="window.print()">প্রিন্ট</button>
+    <input type="file" id="rf" accept=".json" hidden>
+  </div>
+</header>
+<main>
+  <section class="stats" id="stats"></section>
+
+  <section class="panel">
+    <h2>নতুন এন্ট্রি</h2>
+    <form id="f">
+      <label>ধরন
+        <select id="type"><option>বিক্রয়</option><option>ক্রয়</option><option>খরচ</option></select></label>
+      <label>তারিখ<input type="date" id="date" required></label>
+      <label>বিবরণ<input id="desc" placeholder="যেমন: থ্রি-পিস ২ পিস" required></label>
+      <label id="pl">গ্রাহকের নাম<input id="party" list="parties" placeholder="বাকি হলে নাম দিন"></label>
+      <label>মোট টাকা<input type="number" id="total" min="0" step="any" required></label>
+      <label>নগদ পেয়েছি/দিয়েছি<input type="number" id="paid" min="0" step="any" placeholder="পুরো হলে ফাঁকা রাখুন"></label>
+      <button class="primary" type="submit">সংরক্ষণ করুন</button>
+    </form>
+    <datalist id="parties"></datalist>
+  </section>
+
+  <section class="panel" id="rp">
+    <h2>দৈনিক রিপোর্ট পাঠান</h2>
+    <div class="row">
+      <label>তারিখ<input type="date" id="rd"></label>
+      <label>আমার ইমেইল<input type="email" id="em" placeholder="name@gmail.com"></label>
+      <label>WhatsApp নম্বর (কান্ট্রি কোডসহ)<input type="tel" id="wa" placeholder="8801XXXXXXXXX"></label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" onclick="sendPDF()">PDF বানিয়ে পাঠান</button>
+      <button onclick="waText()">WhatsApp-এ সারাংশ</button>
+      <button onclick="mailText()">ইমেইলে সারাংশ</button>
+    </div>
+    <details style="margin-top:12px">
+      <summary><b>প্রতিদিন নিজে নিজে পাঠানো (Telegram + ইমেইল)</b></summary>
+      <div class="row" style="margin-top:8px">
+        <label>Apps Script Web App URL<input id="su" placeholder="https://script.google.com/macros/s/…/exec"></label>
+        <label>গোপন কোড (Code.gs-এর সাথে এক)<input id="sk" type="password"></label>
+        <button onclick="push(true)">এখনই সিঙ্ক করুন</button>
+      </div>
+      <p id="ss" style="color:var(--muted);font-size:13px;margin:6px 0 0"></p>
+    </details>
+  </section>
+
+  <div class="tabs">
+    <button id="tb1" class="on" onclick="tab(1)">সব এন্ট্রি</button>
+    <button id="tb2" onclick="tab(2)">বাকির খাতা</button>
+  </div>
+
+  <section class="panel" id="v1">
+    <div class="filters">
+      <select id="ft"><option value="">সব ধরন</option><option>বিক্রয়</option><option>ক্রয়</option><option>খরচ</option></select>
+      <input type="month" id="fm" aria-label="মাস">
+      <input id="fs" placeholder="খুঁজুন…">
+      <button onclick="fm.value='';ft.value='';fs.value='';render()">রিসেট</button>
+    </div>
+    <div class="wrap"><table>
+      <thead><tr><th>তারিখ</th><th>ধরন</th><th>বিবরণ</th><th>পার্টি</th><th class="n">মোট</th><th class="n">পরিশোধ</th><th class="n">বাকি</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel" id="v2" hidden>
+    <h2>কার কাছে কত পাওনা / কাকে কত দেনা</h2>
+    <div class="wrap"><table>
+      <thead><tr><th>নাম</th><th>ধরন</th><th class="n">বাকি</th><th></th></tr></thead>
+      <tbody id="dues"></tbody>
+    </table></div>
+  </section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const K='shop-accounts-v1';
+let db;
+try{db=JSON.parse(localStorage.getItem(K))||{}}catch(e){db={}}
+db.entries=db.entries||[];db.shop=db.shop||$('shop').value;
+$('shop').value=db.shop;
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(db))}catch(e){alert('সংরক্ষণ করা যায়নি — ব্রাউজারের স্টোরেজ বন্ধ থাকতে পারে।')}push()};
+const bn=n=>'৳ '+(Math.round(n*100)/100).toLocaleString('bn-BD');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const today=()=>new Date().toISOString().slice(0,10);
+$('date').value=today();
+$('shop').oninput=e=>{db.shop=e.target.value;save()};
+$('type').onchange=()=>{const t=$('type').value;$('pl').firstChild.textContent=t==='ক্রয়'?'সরবরাহকারীর নাম':t==='খরচ'?'কাকে দিলেন (ঐচ্ছিক)':'গ্রাহকের নাম'};
+
+$('f').onsubmit=e=>{
+  e.preventDefault();
+  const type=$('type').value,total=+$('total').value;
+  let paid=$('paid').value===''?total:+$('paid').value;
+  if(type==='খরচ')paid=total;
+  if(paid>total){alert('পরিশোধ মোট টাকার বেশি হতে পারে না।');return}
+  const party=$('party').value.trim();
+  if(paid<total&&!party){alert('বাকি থাকলে নাম দিন।');return}
+  db.entries.push({id:Date.now(),date:$('date').value,type,desc:$('desc').value.trim(),party,total,paid});
+  save();
+  ['desc','party','total','paid'].forEach(i=>$(i).value='');
+  render();
+};
+
+function pay(id){
+  const en=db.entries.find(x=>x.id===id),due=en.total-en.paid;
+  const v=prompt(`কত টাকা ${en.type==='বিক্রয়'?'আদায়':'পরিশোধ'} হলো? (বাকি ${due})`,due);
+  if(v===null)return;
+  const a=+v;
+  if(!(a>0)||a>due){alert('সঠিক পরিমাণ দিন।');return}
+  en.paid+=a;save();render();
+}
+function del(id){
+  if(!confirm('এই এন্ট্রি মুছে ফেলবেন?'))return;
+  db.entries=db.entries.filter(x=>x.id!==id);save();render();
+}
+function payParty(name,type){
+  const list=db.entries.filter(x=>x.party===name&&x.type===type&&x.total>x.paid).sort((a,b)=>a.date.localeCompare(b.date));
+  const due=list.reduce((s,x)=>s+x.total-x.paid,0);
+  const v=prompt(`${name}: কত টাকা ${type==='বিক্রয়'?'আদায়':'পরিশোধ'} হলো? (মোট বাকি ${due})`,due);
+  if(v===null)return;
+  let a=+v;
+  if(!(a>0)||a>due){alert('সঠিক পরিমাণ দিন।');return}
+  for(const x of list){if(a<=0)break;const p=Math.min(a,x.total-x.paid);x.paid+=p;a-=p}
+  save();render();
+}
+function tab(n){$('v1').hidden=n!==1;$('v2').hidden=n!==2;$('tb1').className=n===1?'on':'';$('tb2').className=n===2?'on':''}
+
+function render(){
+  const E=db.entries,td=today(),mo=td.slice(0,7);
+  const sum=(f,k='total')=>E.filter(f).reduce((s,x)=>s+x[k],0);
+  const sales=sum(x=>x.type==='বিক্রয়'),buys=sum(x=>x.type==='ক্রয়'),exp=sum(x=>x.type==='খরচ');
+  const recv=E.filter(x=>x.type==='বিক্রয়').reduce((s,x)=>s+x.total-x.paid,0);
+  const pay_=E.filter(x=>x.type==='ক্রয়').reduce((s,x)=>s+x.total-x.paid,0);
+  const cash=E.reduce((s,x)=>s+(x.type==='বিক্রয়'?x.paid:-x.paid),0);
+  $('stats').innerHTML=[
+    ['আজকের বিক্রয়',bn(sum(x=>x.type==='বিক্রয়'&&x.date===td)),'g'],
+    ['এই মাসের বিক্রয়',bn(sum(x=>x.type==='বিক্রয়'&&x.date.startsWith(mo))),'g'],
+    ['মোট লাভ (বিক্রয় − ক্রয় − খরচ)',bn(sales-buys-exp),'y'],
+    ['নগদ জমা (হাতে)',bn(cash),''],
+    ['গ্রাহকের কাছে পাওনা',bn(recv),'r'],
+    ['সরবরাহকারীকে দেনা',bn(pay_),'r']
+  ].map(([l,v,c])=>`<div class="stat ${c}"><small>${l}</small><b>${v}</b></div>`).join('');
+
+  $('parties').innerHTML=[...new Set(E.map(x=>x.party).filter(Boolean))].map(p=>`<option value="${esc(p)}">`).join('');
+
+  const t=$('ft').value,m=$('fm').value,q=$('fs').value.trim().toLowerCase();
+  const L=E.filter(x=>(!t||x.type===t)&&(!m||x.date.startsWith(m))&&(!q||(x.desc+x.party).toLowerCase().includes(q)))
+    .sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+  $('rows').innerHTML=L.length?L.map(x=>{const d=x.total-x.paid;return `<tr>
+    <td>${x.date}</td><td class="t-${x.type}">${x.type}</td><td>${esc(x.desc)}</td><td>${esc(x.party)}</td>
+    <td class="n">${bn(x.total)}</td><td class="n">${bn(x.paid)}</td><td class="n ${d?'due':''}">${d?bn(d):'—'}</td>
+    <td class="n">${d?`<button class="sm" onclick="pay(${x.id})">${x.type==='বিক্রয়'?'আদায়':'পরিশোধ'}</button> `:''}<button class="sm" onclick="del(${x.id})" aria-label="মুছুন">✕</button></td></tr>`}).join('')
+    :'<tr><td colspan="8" class="empty">কোনো এন্ট্রি নেই। উপরের ফর্ম থেকে প্রথম এন্ট্রি যোগ করুন।</td></tr>';
+
+  const g={};
+  E.filter(x=>x.total>x.paid).forEach(x=>{const k=x.party+'|'+x.type;g[k]=(g[k]||0)+x.total-x.paid});
+  const G=Object.entries(g).sort((a,b)=>b[1]-a[1]);
+  $('dues').innerHTML=G.length?G.map(([k,v])=>{const [p,ty]=k.split('|');return `<tr>
+    <td>${esc(p)}</td><td>${ty==='বিক্রয়'?'গ্রাহক — পাওনা':'সরবরাহকারী — দেনা'}</td><td class="n due">${bn(v)}</td>
+    <td class="n"><button class="sm" data-p="${esc(p)}" data-t="${ty}" onclick="payParty(this.dataset.p,this.dataset.t)">${ty==='বিক্রয়'?'আদায়':'পরিশোধ'}</button></td></tr>`}).join('')
+    :'<tr><td colspan="4" class="empty">কোনো বাকি নেই।</td></tr>';
+}
+['ft','fm','fs'].forEach(i=>$(i).oninput=render);
+
+$('rd').value=today();$('em').value=db.email||'';$('wa').value=db.wa||'';
+$('em').oninput=e=>{db.email=e.target.value.trim();save()};
+$('wa').oninput=e=>{db.wa=e.target.value.replace(/\D/g,'');save()};
+function dayData(){
+  const d=$('rd').value||today(),L=db.entries.filter(x=>x.date===d);
+  const s=t=>L.filter(x=>x.type===t).reduce((a,x)=>a+x.total,0);
+  return{d,L,sale:s('বিক্রয়'),buy:s('ক্রয়'),exp:s('খরচ'),
+    cash:L.reduce((a,x)=>a+(x.type==='বিক্রয়'?x.paid:-x.paid),0),
+    due:L.filter(x=>x.type==='বিক্রয়').reduce((a,x)=>a+x.total-x.paid,0)};
+}
+function summary(){
+  const r=dayData();
+  return `${db.shop} — ${r.d}\nবিক্রয়: ${bn(r.sale)}\nক্রয়: ${bn(r.buy)}\nখরচ: ${bn(r.exp)}\nনগদ জমা: ${bn(r.cash)}\nবিক্রয়ে বাকি: ${bn(r.due)}\nমোট এন্ট্রি: ${r.L.length}টি`;
+}
+function waText(){
+  if(!db.wa){alert('WhatsApp নম্বর দিন।');return}
+  window.open('https://wa.me/'+db.wa+'?text='+encodeURIComponent(summary()),'_blank');
+}
+function mailText(){
+  if(!db.email){alert('ইমেইল দিন।');return}
+  location.href='mailto:'+db.email+'?subject='+encodeURIComponent(db.shop+' — দৈনিক হিসাব '+dayData().d)+'&body='+encodeURIComponent(summary());
+}
+async function makePDF(){
+  const r=dayData(),el=document.createElement('div');
+  el.style.cssText='position:fixed;left:0;top:0;z-index:-1;width:720px;padding:24px;background:#fff;color:#000;font-family:"Noto Sans Bengali",sans-serif;font-size:14px';
+  const th='style="border:1px solid #999;padding:5px;text-align:left"',td='style="border:1px solid #999;padding:5px"';
+  el.innerHTML=`<h2 style="margin:0">${esc(db.shop)}</h2><p style="margin:4px 0 12px">দৈনিক হিসাব — ${r.d}</p>
+  <table style="width:100%;border-collapse:collapse"><tr><th ${th}>ধরন</th><th ${th}>বিবরণ</th><th ${th}>পার্টি</th><th ${th}>মোট</th><th ${th}>পরিশোধ</th><th ${th}>বাকি</th></tr>
+  ${r.L.map(x=>`<tr><td ${td}>${x.type}</td><td ${td}>${esc(x.desc)}</td><td ${td}>${esc(x.party)}</td><td ${td}>${bn(x.total)}</td><td ${td}>${bn(x.paid)}</td><td ${td}>${bn(x.total-x.paid)}</td></tr>`).join('')||`<tr><td ${td} colspan="6">এই দিনে কোনো এন্ট্রি নেই।</td></tr>`}</table>
+  <p style="margin-top:14px;line-height:1.8">বিক্রয়: <b>${bn(r.sale)}</b> | ক্রয়: <b>${bn(r.buy)}</b> | খরচ: <b>${bn(r.exp)}</b><br>নগদ জমা: <b>${bn(r.cash)}</b> | বিক্রয়ে বাকি: <b>${bn(r.due)}</b></p>`;
+  document.body.appendChild(el);
+  try{
+    await document.fonts.ready;
+    const blob=await html2pdf().set({margin:8,html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4'}}).from(el).outputPdf('blob');
+    return new File([blob],`hisab-${r.d}.pdf`,{type:'application/pdf'});
+  }finally{el.remove()}
+}
+async function sendPDF(){
+  if(typeof html2pdf==='undefined'){alert('PDF লাইব্রেরি লোড হয়নি। ইন্টারনেট চেক করে পেজ রিফ্রেশ করুন।');return}
+  let f;try{f=await makePDF()}catch(e){alert('PDF বানানো যায়নি: '+e.message);return}
+  if(navigator.canShare&&navigator.canShare({files:[f]})){
+    try{await navigator.share({files:[f],title:db.shop,text:summary()});return}
+    catch(e){if(e.name==='AbortError')return}
+  }
+  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click();
+  alert('PDF ডাউনলোড হয়েছে। এবার WhatsApp বা ইমেইলে ফাইলটি যুক্ত করে পাঠান।');
+}
+$('su').value=db.url||'';$('sk').value=db.secret||'';
+$('su').onchange=e=>{db.url=e.target.value.trim();save()};
+$('sk').onchange=e=>{db.secret=e.target.value.trim();save()};
+let pt;
+function push(now){
+  if(!db.url||!db.secret){if(now===true)alert('URL ও গোপন কোড দিন।');return}
+  clearTimeout(pt);
+  pt=setTimeout(()=>{
+    fetch(db.url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({secret:db.secret,shop:db.shop,entries:db.entries})})
+    .then(()=>{$('ss').textContent='শিটে পাঠানো হয়েছে — '+new Date().toLocaleTimeString('bn-BD')})
+    .catch(()=>{$('ss').textContent='পাঠানো যায়নি — ইন্টারনেট চেক করুন'});
+  },now===true?0:1500);
+}
+function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
+function exportCSV(){
+  const r=[['তারিখ','ধরন','বিবরণ','পার্টি','মোট','পরিশোধ','বাকি'],...db.entries.map(x=>[x.date,x.type,x.desc,x.party,x.total,x.paid,x.total-x.paid])];
+  dl('hisab-'+today()+'.csv','\ufeff'+r.map(a=>a.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv');
+}
+function backup(){dl('hisab-backup-'+today()+'.json',JSON.stringify(db),'application/json')}
+$('rf').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  f.text().then(t=>{
+    try{const d=JSON.parse(t);if(!Array.isArray(d.entries))throw 0;
+      if(!confirm('বর্তমান সব হিসাব মুছে ব্যাকআপ ফাইলের হিসাব বসবে। এগিয়ে যাবেন?'))return;
+      db=d;$('shop').value=db.shop||'';save();render()}
+    catch(_){alert('এটি সঠিক ব্যাকআপ ফাইল নয়।')}
+  });e.target.value='';
+};
+render();
+</script>
+</body>
+</html>
