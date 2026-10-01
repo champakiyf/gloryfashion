@@ -64,13 +64,17 @@ td.n,th.n{text-align:right;white-space:nowrap}
       <label>ধরন
         <select id="type"><option>বিক্রয়</option><option>ক্রয়</option><option>খরচ</option></select></label>
       <label>তারিখ<input type="date" id="date" required></label>
-      <label>বিবরণ<input id="desc" placeholder="যেমন: থ্রি-পিস ২ পিস" required></label>
+      <label>ক্যাটাগরি<input id="cat" list="cats" placeholder="যেমন: শাড়ি, থ্রি-পিস"></label>
+      <label>বিবরণ<input id="desc" placeholder="যেমন: লাল সুতি, XL" required></label>
+      <label>পরিমাণ (পিস/গজ)<input type="number" id="qty" min="0" step="any" placeholder="যেমন: ২"></label>
       <label id="pl">গ্রাহকের নাম<input id="party" list="parties" placeholder="বাকি হলে নাম দিন"></label>
       <label>মোট টাকা<input type="number" id="total" min="0" step="any" required></label>
       <label>নগদ পেয়েছি/দিয়েছি<input type="number" id="paid" min="0" step="any" placeholder="পুরো হলে ফাঁকা রাখুন"></label>
-      <button class="primary" type="submit">সংরক্ষণ করুন</button>
+      <button class="primary" type="submit" id="sb">সংরক্ষণ করুন</button>
+      <button type="button" id="cb" hidden onclick="cancelEdit()">বাতিল</button>
     </form>
     <datalist id="parties"></datalist>
+    <datalist id="cats"></datalist>
   </section>
 
   <section class="panel" id="rp">
@@ -99,17 +103,19 @@ td.n,th.n{text-align:right;white-space:nowrap}
   <div class="tabs">
     <button id="tb1" class="on" onclick="tab(1)">সব এন্ট্রি</button>
     <button id="tb2" onclick="tab(2)">বাকির খাতা</button>
+    <button id="tb3" onclick="tab(3)">ক্যাটাগরি হিসাব</button>
   </div>
 
   <section class="panel" id="v1">
     <div class="filters">
       <select id="ft"><option value="">সব ধরন</option><option>বিক্রয়</option><option>ক্রয়</option><option>খরচ</option></select>
+      <select id="fc"><option value="">সব ক্যাটাগরি</option></select>
       <input type="month" id="fm" aria-label="মাস">
       <input id="fs" placeholder="খুঁজুন…">
-      <button onclick="fm.value='';ft.value='';fs.value='';render()">রিসেট</button>
+      <button onclick="fm.value='';ft.value='';fc.value='';fs.value='';render()">রিসেট</button>
     </div>
     <div class="wrap"><table>
-      <thead><tr><th>তারিখ</th><th>ধরন</th><th>বিবরণ</th><th>পার্টি</th><th class="n">মোট</th><th class="n">পরিশোধ</th><th class="n">বাকি</th><th></th></tr></thead>
+      <thead><tr><th>তারিখ</th><th>ধরন</th><th>ক্যাটাগরি</th><th>বিবরণ</th><th class="n">পরিমাণ</th><th>পার্টি</th><th class="n">মোট</th><th class="n">পরিশোধ</th><th class="n">বাকি</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table></div>
   </section>
@@ -119,6 +125,14 @@ td.n,th.n{text-align:right;white-space:nowrap}
     <div class="wrap"><table>
       <thead><tr><th>নাম</th><th>ধরন</th><th class="n">বাকি</th><th></th></tr></thead>
       <tbody id="dues"></tbody>
+    </table></div>
+  </section>
+  <section class="panel" id="v3" hidden>
+    <h2>ক্যাটাগরি অনুযায়ী বিক্রয় ও পরিমাণ</h2>
+    <div class="filters"><input type="month" id="cm" aria-label="মাস"><button onclick="cm.value='';render()">সব সময়</button></div>
+    <div class="wrap"><table>
+      <thead><tr><th>ক্যাটাগরি</th><th class="n">বিক্রয় (টাকা)</th><th class="n">বিক্রীত পরিমাণ</th><th class="n">ক্রয় (টাকা)</th><th class="n">ক্রীত পরিমাণ</th></tr></thead>
+      <tbody id="catrows"></tbody>
     </table></div>
   </section>
 </main>
@@ -146,19 +160,35 @@ $('f').onsubmit=e=>{
   if(paid>total){alert('পরিশোধ মোট টাকার বেশি হতে পারে না।');return}
   const party=$('party').value.trim();
   if(paid<total&&!party){alert('বাকি থাকলে নাম দিন।');return}
-  db.entries.push({id:Date.now(),date:$('date').value,type,desc:$('desc').value.trim(),party,total,paid});
+  const rec={date:$('date').value,type,cat:$('cat').value.trim(),desc:$('desc').value.trim(),qty:+$('qty').value||0,party,total,paid,ts:Date.now()};
+  if(editId){Object.assign(db.entries.find(x=>x.id===editId),rec);save();cancelEdit();render();return}
+  db.entries.push({id:Date.now(),...rec});
   save();
-  ['desc','party','total','paid'].forEach(i=>$(i).value='');
+  ['cat','desc','qty','party','total','paid'].forEach(i=>$(i).value='');
   render();
 };
 
+let editId=null;
+function edit(id){
+  const x=db.entries.find(v=>v.id===id);if(!x)return;
+  editId=id;
+  $('type').value=x.type;$('type').onchange();
+  $('date').value=x.date;$('cat').value=x.cat||'';$('desc').value=x.desc;$('qty').value=x.qty||'';
+  $('party').value=x.party;$('total').value=x.total;$('paid').value=x.paid;
+  $('sb').textContent='আপডেট করুন';$('cb').hidden=false;
+  $('f').scrollIntoView({behavior:'smooth',block:'center'});
+}
+function cancelEdit(){
+  editId=null;$('f').reset();$('date').value=today();
+  $('sb').textContent='সংরক্ষণ করুন';$('cb').hidden=true;$('type').onchange();
+}
 function pay(id){
   const en=db.entries.find(x=>x.id===id),due=en.total-en.paid;
   const v=prompt(`কত টাকা ${en.type==='বিক্রয়'?'আদায়':'পরিশোধ'} হলো? (বাকি ${due})`,due);
   if(v===null)return;
   const a=+v;
   if(!(a>0)||a>due){alert('সঠিক পরিমাণ দিন।');return}
-  en.paid+=a;save();render();
+  en.paid+=a;en.ts=Date.now();save();render();
 }
 function del(id){
   if(!confirm('এই এন্ট্রি মুছে ফেলবেন?'))return;
@@ -171,10 +201,10 @@ function payParty(name,type){
   if(v===null)return;
   let a=+v;
   if(!(a>0)||a>due){alert('সঠিক পরিমাণ দিন।');return}
-  for(const x of list){if(a<=0)break;const p=Math.min(a,x.total-x.paid);x.paid+=p;a-=p}
+  for(const x of list){if(a<=0)break;const p=Math.min(a,x.total-x.paid);x.paid+=p;x.ts=Date.now();a-=p}
   save();render();
 }
-function tab(n){$('v1').hidden=n!==1;$('v2').hidden=n!==2;$('tb1').className=n===1?'on':'';$('tb2').className=n===2?'on':''}
+function tab(n){[1,2,3].forEach(i=>{$('v'+i).hidden=i!==n;$('tb'+i).className=i===n?'on':''})}
 
 function render(){
   const E=db.entries,td=today(),mo=td.slice(0,7);
@@ -194,15 +224,27 @@ function render(){
 
   $('parties').innerHTML=[...new Set(E.map(x=>x.party).filter(Boolean))].map(p=>`<option value="${esc(p)}">`).join('');
 
-  const t=$('ft').value,m=$('fm').value,q=$('fs').value.trim().toLowerCase();
-  const L=E.filter(x=>(!t||x.type===t)&&(!m||x.date.startsWith(m))&&(!q||(x.desc+x.party).toLowerCase().includes(q)))
+  const cats=[...new Set(E.map(x=>x.cat).filter(Boolean))].sort();
+  $('cats').innerHTML=cats.map(v=>`<option value="${esc(v)}">`).join('');
+  const fcs=$('fc'),cur=fcs.value;fcs.innerHTML='<option value="">সব ক্যাটাগরি</option>'+cats.map(v=>`<option>${esc(v)}</option>`).join('');fcs.value=cur;
+  const c=$('fc').value,t=$('ft').value,m=$('fm').value,q=$('fs').value.trim().toLowerCase();
+  const L=E.filter(x=>(!t||x.type===t)&&(!c||x.cat===c)&&(!m||x.date.startsWith(m))&&(!q||(x.desc+x.party+(x.cat||'')).toLowerCase().includes(q)))
     .sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
   $('rows').innerHTML=L.length?L.map(x=>{const d=x.total-x.paid;return `<tr>
-    <td>${x.date}</td><td class="t-${x.type}">${x.type}</td><td>${esc(x.desc)}</td><td>${esc(x.party)}</td>
+    <td>${x.date}</td><td class="t-${x.type}">${x.type}</td><td>${esc(x.cat||'')}</td><td>${esc(x.desc)}</td><td class="n">${x.qty||''}</td><td>${esc(x.party)}</td>
     <td class="n">${bn(x.total)}</td><td class="n">${bn(x.paid)}</td><td class="n ${d?'due':''}">${d?bn(d):'—'}</td>
-    <td class="n">${d?`<button class="sm" onclick="pay(${x.id})">${x.type==='বিক্রয়'?'আদায়':'পরিশোধ'}</button> `:''}<button class="sm" onclick="del(${x.id})" aria-label="মুছুন">✕</button></td></tr>`}).join('')
-    :'<tr><td colspan="8" class="empty">কোনো এন্ট্রি নেই। উপরের ফর্ম থেকে প্রথম এন্ট্রি যোগ করুন।</td></tr>';
+    <td class="n">${d?`<button class="sm" onclick="pay(${x.id})">${x.type==='বিক্রয়'?'আদায়':'পরিশোধ'}</button> `:''}<button class="sm" onclick="edit(${x.id})">সম্পাদনা</button> <button class="sm" onclick="del(${x.id})" aria-label="মুছুন">✕</button></td></tr>`}).join('')
+    :'<tr><td colspan="10" class="empty">কোনো এন্ট্রি নেই। উপরের ফর্ম থেকে প্রথম এন্ট্রি যোগ করুন।</td></tr>';
 
+  const qn=n=>(Math.round(n*100)/100).toLocaleString('bn-BD'),cm3=$('cm').value,g3={};
+  E.filter(x=>x.type!=='খরচ'&&(!cm3||x.date.startsWith(cm3))).forEach(x=>{
+    const k=x.cat||'(ক্যাটাগরি নেই)',o=g3[k]=g3[k]||{s:0,sq:0,b:0,bq:0};
+    if(x.type==='বিক্রয়'){o.s+=x.total;o.sq+=x.qty||0}else{o.b+=x.total;o.bq+=x.qty||0}
+  });
+  const rows3=Object.entries(g3).sort((a,b)=>b[1].s-a[1].s);
+  const tot3=rows3.reduce((t,[,o])=>({s:t.s+o.s,sq:t.sq+o.sq,b:t.b+o.b,bq:t.bq+o.bq}),{s:0,sq:0,b:0,bq:0});
+  $('catrows').innerHTML=rows3.length?rows3.map(([k,o])=>`<tr><td>${esc(k)}</td><td class="n">${bn(o.s)}</td><td class="n">${qn(o.sq)}</td><td class="n">${bn(o.b)}</td><td class="n">${qn(o.bq)}</td></tr>`).join('')+`<tr><th>মোট</th><th class="n">${bn(tot3.s)}</th><th class="n">${qn(tot3.sq)}</th><th class="n">${bn(tot3.b)}</th><th class="n">${qn(tot3.bq)}</th></tr>`
+    :'<tr><td colspan="5" class="empty">এই সময়ে কোনো বিক্রয় বা ক্রয় নেই।</td></tr>';
   const g={};
   E.filter(x=>x.total>x.paid).forEach(x=>{const k=x.party+'|'+x.type;g[k]=(g[k]||0)+x.total-x.paid});
   const G=Object.entries(g).sort((a,b)=>b[1]-a[1]);
@@ -211,7 +253,7 @@ function render(){
     <td class="n"><button class="sm" data-p="${esc(p)}" data-t="${ty}" onclick="payParty(this.dataset.p,this.dataset.t)">${ty==='বিক্রয়'?'আদায়':'পরিশোধ'}</button></td></tr>`}).join('')
     :'<tr><td colspan="4" class="empty">কোনো বাকি নেই।</td></tr>';
 }
-['ft','fm','fs'].forEach(i=>$(i).oninput=render);
+['ft','fc','fm','fs','cm'].forEach(i=>$(i).oninput=render);
 
 $('rd').value=today();$('em').value=db.email||'';$('wa').value=db.wa||'';
 $('em').oninput=e=>{db.email=e.target.value.trim();save()};
@@ -240,8 +282,8 @@ async function makePDF(){
   el.style.cssText='position:fixed;left:0;top:0;z-index:-1;width:720px;padding:24px;background:#fff;color:#000;font-family:"Noto Sans Bengali",sans-serif;font-size:14px';
   const th='style="border:1px solid #999;padding:5px;text-align:left"',td='style="border:1px solid #999;padding:5px"';
   el.innerHTML=`<h2 style="margin:0">${esc(db.shop)}</h2><p style="margin:4px 0 12px">দৈনিক হিসাব — ${r.d}</p>
-  <table style="width:100%;border-collapse:collapse"><tr><th ${th}>ধরন</th><th ${th}>বিবরণ</th><th ${th}>পার্টি</th><th ${th}>মোট</th><th ${th}>পরিশোধ</th><th ${th}>বাকি</th></tr>
-  ${r.L.map(x=>`<tr><td ${td}>${x.type}</td><td ${td}>${esc(x.desc)}</td><td ${td}>${esc(x.party)}</td><td ${td}>${bn(x.total)}</td><td ${td}>${bn(x.paid)}</td><td ${td}>${bn(x.total-x.paid)}</td></tr>`).join('')||`<tr><td ${td} colspan="6">এই দিনে কোনো এন্ট্রি নেই।</td></tr>`}</table>
+  <table style="width:100%;border-collapse:collapse"><tr><th ${th}>ধরন</th><th ${th}>ক্যাটাগরি</th><th ${th}>বিবরণ</th><th ${th}>পরিমাণ</th><th ${th}>পার্টি</th><th ${th}>মোট</th><th ${th}>পরিশোধ</th><th ${th}>বাকি</th></tr>
+  ${r.L.map(x=>`<tr><td ${td}>${x.type}</td><td ${td}>${esc(x.cat||'')}</td><td ${td}>${esc(x.desc)}</td><td ${td}>${x.qty||''}</td><td ${td}>${esc(x.party)}</td><td ${td}>${bn(x.total)}</td><td ${td}>${bn(x.paid)}</td><td ${td}>${bn(x.total-x.paid)}</td></tr>`).join('')||`<tr><td ${td} colspan="8">এই দিনে কোনো এন্ট্রি নেই।</td></tr>`}</table>
   <p style="margin-top:14px;line-height:1.8">বিক্রয়: <b>${bn(r.sale)}</b> | ক্রয়: <b>${bn(r.buy)}</b> | খরচ: <b>${bn(r.exp)}</b><br>নগদ জমা: <b>${bn(r.cash)}</b> | বিক্রয়ে বাকি: <b>${bn(r.due)}</b></p>`;
   document.body.appendChild(el);
   try{
@@ -281,8 +323,9 @@ async function sync(){
     db.deleted=[...dead];
     const m=new Map(db.entries.map(x=>[x.id,x]));
     r.entries.forEach(x=>{
-      x={id:+x.id,date:String(x.date),type:x.type,desc:String(x.desc),party:String(x.party),total:+x.total,paid:+x.paid};
-      const l=m.get(x.id);if(l)l.paid=Math.max(l.paid,x.paid);else m.set(x.id,x);
+      x={id:+x.id,date:String(x.date),type:x.type,desc:String(x.desc),party:String(x.party),cat:String(x.cat||''),qty:+x.qty||0,total:+x.total,paid:+x.paid,ts:+x.ts||0};
+      const l=m.get(x.id);
+      if(!l)m.set(x.id,x);else if(x.ts>(l.ts||0))m.set(x.id,x);else if(x.ts===(l.ts||0))l.paid=Math.max(l.paid,x.paid);
     });
     db.entries=[...m.values()].filter(x=>!dead.has(x.id));
     try{localStorage.setItem(K,JSON.stringify(db))}catch(e){}
@@ -292,7 +335,7 @@ async function sync(){
 }
 function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
 function exportCSV(){
-  const r=[['তারিখ','ধরন','বিবরণ','পার্টি','মোট','পরিশোধ','বাকি'],...db.entries.map(x=>[x.date,x.type,x.desc,x.party,x.total,x.paid,x.total-x.paid])];
+  const r=[['তারিখ','ধরন','ক্যাটাগরি','বিবরণ','পরিমাণ','পার্টি','মোট','পরিশোধ','বাকি'],...db.entries.map(x=>[x.date,x.type,x.cat||'',x.desc,x.qty||'',x.party,x.total,x.paid,x.total-x.paid])];
   dl('hisab-'+today()+'.csv','\ufeff'+r.map(a=>a.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv');
 }
 function backup(){dl('hisab-backup-'+today()+'.json',JSON.stringify(db),'application/json')}
