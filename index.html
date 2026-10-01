@@ -46,7 +46,7 @@ td.n,th.n{text-align:right;white-space:nowrap}
 </head>
 <body>
 <header>
-  <input id="shop" aria-label="দোকানের নাম" value="আমার কাপড়ের দোকান">
+  <input id="shop" aria-label="দোকানের নাম" value="Glory Fashion House">
   <div class="tools">
     <button onclick="exportCSV()">CSV</button>
     <button onclick="backup()">ব্যাকআপ</button>
@@ -128,7 +128,7 @@ const $=id=>document.getElementById(id);
 const K='shop-accounts-v1';
 let db;
 try{db=JSON.parse(localStorage.getItem(K))||{}}catch(e){db={}}
-db.entries=db.entries||[];db.shop=db.shop||$('shop').value;
+db.entries=db.entries||[];db.deleted=db.deleted||[];db.shop=db.shop||$('shop').value;
 $('shop').value=db.shop;
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(db))}catch(e){alert('সংরক্ষণ করা যায়নি — ব্রাউজারের স্টোরেজ বন্ধ থাকতে পারে।')}push()};
 const bn=n=>'৳ '+(Math.round(n*100)/100).toLocaleString('bn-BD');
@@ -162,7 +162,7 @@ function pay(id){
 }
 function del(id){
   if(!confirm('এই এন্ট্রি মুছে ফেলবেন?'))return;
-  db.entries=db.entries.filter(x=>x.id!==id);save();render();
+  db.entries=db.entries.filter(x=>x.id!==id);db.deleted.push(id);save();render();
 }
 function payParty(name,type){
   const list=db.entries.filter(x=>x.party===name&&x.type===type&&x.total>x.paid).sort((a,b)=>a.date.localeCompare(b.date));
@@ -253,7 +253,7 @@ async function makePDF(){
 async function sendPDF(){
   if(typeof html2pdf==='undefined'){alert('PDF লাইব্রেরি লোড হয়নি। ইন্টারনেট চেক করে পেজ রিফ্রেশ করুন।');return}
   let f;try{f=await makePDF()}catch(e){alert('PDF বানানো যায়নি: '+e.message);return}
-  if(navigator.canShare&&navigator.canShare({files:[f]})){
+  if(/Android|iPhone|iPad/i.test(navigator.userAgent)&&navigator.canShare&&navigator.canShare({files:[f]})){
     try{await navigator.share({files:[f],title:db.shop,text:summary()});return}
     catch(e){if(e.name==='AbortError')return}
   }
@@ -267,12 +267,28 @@ let pt;
 function push(now){
   if(!db.url||!db.secret){if(now===true)alert('URL ও গোপন কোড দিন।');return}
   clearTimeout(pt);
-  pt=setTimeout(()=>{
-    fetch(db.url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({secret:db.secret,shop:db.shop,entries:db.entries})})
-    .then(()=>{$('ss').textContent='শিটে পাঠানো হয়েছে — '+new Date().toLocaleTimeString('bn-BD')})
-    .catch(()=>{$('ss').textContent='পাঠানো যায়নি — ইন্টারনেট চেক করুন'});
-  },now===true?0:1500);
+  pt=setTimeout(sync,now===true?0:1500);
+}
+async function sync(){
+  const st=$('ss');
+  try{
+    st.textContent='সিঙ্ক হচ্ছে…';
+    await fetch(db.url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({secret:db.secret,shop:db.shop,entries:db.entries,deleted:db.deleted})});
+    const r=await (await fetch(db.url+'?secret='+encodeURIComponent(db.secret))).json();
+    if(r.error)throw new Error(r.error);
+    const dead=new Set([...db.deleted,...r.deleted.map(Number)]);
+    db.deleted=[...dead];
+    const m=new Map(db.entries.map(x=>[x.id,x]));
+    r.entries.forEach(x=>{
+      x={id:+x.id,date:String(x.date),type:x.type,desc:String(x.desc),party:String(x.party),total:+x.total,paid:+x.paid};
+      const l=m.get(x.id);if(l)l.paid=Math.max(l.paid,x.paid);else m.set(x.id,x);
+    });
+    db.entries=[...m.values()].filter(x=>!dead.has(x.id));
+    try{localStorage.setItem(K,JSON.stringify(db))}catch(e){}
+    render();
+    st.textContent='সিঙ্ক সম্পূর্ণ — '+new Date().toLocaleTimeString('bn-BD');
+  }catch(e){st.textContent='সিঙ্ক ব্যর্থ — ইন্টারনেট, URL ও গোপন কোড চেক করুন'}
 }
 function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
 function exportCSV(){
@@ -290,6 +306,7 @@ $('rf').onchange=e=>{
   });e.target.value='';
 };
 render();
+if(db.url&&db.secret)sync();
 </script>
 </body>
 </html>
